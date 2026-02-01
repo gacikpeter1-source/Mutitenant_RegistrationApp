@@ -628,23 +628,31 @@ export default function EventDetailPage() {
               <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${Object.keys(event.trainers || {}).length}, minmax(0, 1fr))` }}>
                 {Object.entries(event.trainers || {}).map(([trainerId, trainerSlot]) => {
                   const trainer = trainers[trainerId]
+                  
+                  // Skip if trainer data not loaded
+                  if (!trainer) return null
+                  
                   const confirmedCount = getConfirmedCount(trainerId)
                   const capacity = trainerSlot.capacity
                   const isFull = capacity !== -1 && confirmedCount >= capacity
 
                   return (
                     <TabsTrigger key={trainerId} value={trainerId} className="text-xs sm:text-sm">
-                      {trainer?.name || 'Trainer'}
+                      {trainer.name || 'Trainer'}
                       <span className={`ml-2 ${isFull ? 'text-status-danger' : 'text-status-success'}`}>
                         {capacity === -1 ? `${confirmedCount}/∞` : `${confirmedCount}/${capacity}`}
                       </span>
                     </TabsTrigger>
                   )
-                })}
+                }).filter(Boolean)}
               </TabsList>
 
               {Object.entries(event.trainers || {}).map(([trainerId, trainerSlot]) => {
                 const trainer = trainers[trainerId]
+                
+                // Skip if trainer data not loaded
+                if (!trainer) return null
+                
                 const confirmedRegs = getRegistrationsByTrainer(trainerId).filter(r => r.status === 'confirmed')
                 const waitlistRegs = getWaitlistRegistrations(trainerId)
                 const capacity = trainerSlot.capacity
@@ -655,7 +663,7 @@ export default function EventDetailPage() {
                   <TabsContent key={trainerId} value={trainerId} className="mt-4">
                     {/* Trainer Info */}
                     <div className="flex items-center gap-4 p-4 bg-white/5 rounded-lg mb-4">
-                      {trainer?.photoURL && (
+                      {trainer.photoURL && (
                         <img
                           src={trainer.photoURL}
                           alt={trainer.name}
@@ -663,7 +671,7 @@ export default function EventDetailPage() {
                         />
                       )}
                       <div className="flex-1">
-                        <div className="text-white font-semibold text-lg">{trainer?.name || t('events.trainer')}</div>
+                        <div className="text-white font-semibold text-lg">{trainer.name || t('events.trainer')}</div>
                         {trainerSlot.description && (
                           <p className="text-text-muted text-sm mt-1">{trainerSlot.description}</p>
                         )}
@@ -807,7 +815,7 @@ export default function EventDetailPage() {
                     )}
                   </TabsContent>
                 )
-              })}
+              }).filter(Boolean)}
             </Tabs>
           )}
         </CardContent>
