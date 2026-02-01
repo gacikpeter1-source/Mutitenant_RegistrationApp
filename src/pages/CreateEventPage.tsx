@@ -1,0 +1,594 @@
+import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useNavigate, useParams } from 'react-router-dom'
+import { collection, addDoc, doc, getDoc, updateDoc, deleteDoc, Timestamp, query, where, getDocs } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { useAuth } from '@/contexts/AuthContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useToast } from '@/hooks/use-toast'
+import { Event } from '@/types'
+import { addDays, addWeeks } from '@/lib/utils'
+
+interface Tenant {
+  id: string
+  name: string
+  domain: string
+}
+
+export default function CreateEventPage() {
+  const { t } = useTranslation()
+  const { eventId } = useParams<{ eventId: string }>()
+  const { userData, currentTenantId, isSuperAdmin } = useAuth()
+  const navigate = useNavigate()
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(false)
+  const [tenants, setTenants] = useState<Tenant[]>([])
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('')
+  const [formData, setFormData] = useState({
+    title: '',
+    date: '',
+    hour: '14',
+    minute: '00',
+    duration: 60,
+    type: 'powerskating',
+    capacity: 10,
+    isUnlimited: false,
+    isRecurring: false,
+    recurringType: 'weekly' as 'daily' | 'weekly' | 'monthly',
+    occurrences: 4,
+    weekDays: [] as number[], // 0=Monday, 6=Sunday
+    isOrganizational: false // NEW: Mark as organizational event
+  })
+
+  const trainingTypes = [
+    'powerskating',
+    'endurance',
+    'shooting',
+    'skills',
+    'game',
+    'other'
+  ]
+
+  // Load tenants for SuperAdmin
+  useEffect(() => {
+    if (isSuperAdmin) {
+      loadTenants()
+    } else if (currentTenantId) {
+      setSelectedTenantId(currentTenantId)
+    }
+  }, [isSuperAdmin, currentTenantId])
+
+  const loadTenants = async () => {
+    try {
+      const tenantsQuery = query(
+        collection(db, 'tenants'),
+        where('isActive', '==', true)
+      )
+      const snapshot = await getDocs(tenantsQuery)
+      const tenantsList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name,
+        domain: doc.data().domain
+      }))
+      setTenants(tenantsList)
+      
+      // Auto-select first tenant if none selected
+      if (tenantsList.length > 0 && !selectedTenantId) {
+        setSelectedTenantId(tenantsList[0].id)
+      }
+    } catch (error) {
+      console.error('Error loading tenants:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (eventId) {
+      // Load event for editing
+      const loadEvent = async () => {
+        try {
+          const eventDoc = await getDoc(doc(db, 'events', eventId))
+          if (eventDoc.exists()) {
+            const eventData = eventDoc.data() as Event
+            
+            // MULTI-TENANT: Check access
+            if (!isSuperAdmin && eventData.tenantId !== currentTenantId) {
+              toast({
+                title: t('common.error'),
+                description: 'You do not have access to this event',
+                variant: 'destructive'
+              })
+              navigate('/calendar')
+              return
+            }
+            
+            const eventDate = eventData.date && typeof eventData.date === 'object' && 'toDate' in eventData.date 
+              ? (eventData.date as any).toDate() 
+              : new Date(eventData.date)
+            
+            const hours = eventDate.getHours().toString()
+            const minutes = eventDate.getMinutes().toString()
+            
+            setFormData({
+              title: eventData.title,
+              date: eventDate.toISOString().split('T')[0],
+              hour: hours,
+              minute: minutes === '0' ? '00' : minutes,
+              duration: eventData.duration || 60,
+              type: eventData.type,
+              capacity: eventData.capacity === null ? 10 : (eventData.capacity || 10),
+              isUnlimited: eventData.capacity === null,
+              isRecurring: false,
+              recurringType: 'weekly' as 'daily' | 'weekly' | 'monthly',
+              occurrences: 4,
+              weekDays: [],
+              isOrganizational: eventData.isOrganizational || false
+            })
+            
+            // Set tenant for SuperAdmin when editing
+            if (isSuperAdmin && eventData.tenantId) {
+              setSelectedTenantId(eventData.tenantId)
+            }
+          }
+        } catch (error) {
+          console.error('Error loading event:', error)
+        }
+      }
+      loadEvent()
+    }
+  }, [eventId, isSuperAdmin, currentTenantId])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!userData) return
+    
+    // MULTI-TENANT: Validate tenant selection
+    const tenantId = isSuperAdmin ? selectedTenantId : currentTenantId
+    if (!tenantId) {
+      toast({
+        title: t('common.error'),
+        description: isSuperAdmin ? 'Please select a tenant' : 'Missing tenant information',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (!formData.title || !formData.date) {
+      toast({
+        title: t('common.error'),
+        description: 'Please fill all required fields',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const eventDateTime = new Date(formData.date)
+      eventDateTime.setHours(parseInt(formData.hour), parseInt(formData.minute), 0, 0)
+      
+      const startTime = `${formData.hour.padStart(2, '0')}:${formData.minute.padStart(2, '0')}`
+      
+      // Base event data
+      const eventData: any = {
+        title: formData.title,
+        date: Timestamp.fromDate(eventDateTime),
+        startTime: startTime,
+        duration: formData.duration,
+        type: formData.type,
+        tenantId: tenantId, // MULTI-TENANT: Add tenantId
+        createdBy: userData.uid,
+        updatedAt: new Date()
+      }
+
+      // If organizational event
+      if (formData.isOrganizational) {
+        eventData.isOrganizational = true
+        eventData.importedBy = userData.uid
+        eventData.importedAt = new Date()
+        eventData.status = 'pending' // Will become 'active' when first trainer confirms
+        eventData.trainers = {} // Empty - trainers will confirm later
+      } else {
+        // Regular trainer-created event
+        eventData.trainerId = userData.uid
+        eventData.trainerName = userData.name
+        eventData.capacity = formData.isUnlimited ? null : formData.capacity
+        eventData.attendees = []
+        eventData.waitlist = []
+        eventData.trainers = {
+          [userData.uid]: {
+            trainerId: userData.uid,
+            trainerName: userData.name,
+            trainerPhoto: userData.photoURL || '',
+            capacity: formData.isUnlimited ? -1 : formData.capacity,
+            currentCount: 0,
+            description: '',
+            joinedAt: new Date()
+          }
+        }
+      }
+
+      if (eventId) {
+        // Update existing event
+        await updateDoc(doc(db, 'events', eventId), eventData)
+        toast({
+          title: t('common.success'),
+          description: 'Event updated successfully'
+        })
+      } else {
+        // Create new event(s)
+        if (formData.isRecurring) {
+          // Create recurring events
+          const dates = []
+          let currentDate = eventDateTime
+
+          for (let i = 0; i < formData.occurrences; i++) {
+            dates.push(new Date(currentDate))
+            currentDate = formData.recurringType === 'daily' 
+              ? addDays(currentDate, 1)
+              : addWeeks(currentDate, 1)
+          }
+
+          await Promise.all(dates.map(date => 
+            addDoc(collection(db, 'events'), {
+              ...eventData,
+              date: Timestamp.fromDate(date),
+              createdAt: new Date()
+            })
+          ))
+
+          toast({
+            title: t('common.success'),
+            description: `Created ${formData.occurrences} recurring events`
+          })
+        } else {
+          // Create single event
+          await addDoc(collection(db, 'events'), {
+            ...eventData,
+            createdAt: new Date()
+          })
+          
+          toast({
+            title: t('common.success'),
+            description: 'Event created successfully'
+          })
+        }
+      }
+
+      navigate('/calendar')
+    } catch (error: any) {
+      console.error('Error saving event:', error)
+      toast({
+        title: t('common.error'),
+        description: error.message || 'Failed to save event',
+        variant: 'destructive'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!eventId) return
+    
+    if (!confirm('Are you sure you want to delete this event?')) return
+
+    setLoading(true)
+    try {
+      await deleteDoc(doc(db, 'events', eventId))
+      toast({
+        title: t('common.success'),
+        description: 'Event deleted successfully'
+      })
+      navigate('/calendar')
+    } catch (error: any) {
+      console.error('Error deleting event:', error)
+      toast({
+        title: t('common.error'),
+        description: error.message || 'Failed to delete event',
+        variant: 'destructive'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Show loading if SuperAdmin and tenants not loaded yet
+  if (isSuperAdmin && tenants.length === 0) {
+    return (
+      <div className="content-container py-8">
+        <div className="text-white text-center">Loading tenants...</div>
+      </div>
+    )
+  }
+
+  // Show loading if regular trainer and no tenant
+  if (!isSuperAdmin && !currentTenantId) {
+    return (
+      <div className="content-container py-8">
+        <div className="text-white text-center">Loading tenant...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="content-container py-8">
+      <Card className="arena-card max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle className="text-white text-2xl">
+            {eventId ? t('events.editEvent') : t('events.createEvent')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* MULTI-TENANT: Tenant Selector for SuperAdmin */}
+            {isSuperAdmin && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
+                <Label htmlFor="tenant" className="text-yellow-300 font-semibold">
+                  🏢 Select Tenant
+                </Label>
+                <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                  <SelectTrigger className="mt-2 bg-background-dark border-border text-white">
+                    <SelectValue placeholder="Choose tenant..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tenants.map(tenant => (
+                      <SelectItem key={tenant.id} value={tenant.id}>
+                        {tenant.name} ({tenant.domain})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-yellow-200/70 text-xs mt-2">
+                  This event will be created for the selected tenant
+                </p>
+              </div>
+            )}
+            
+            <div>
+              <Label htmlFor="title" className="text-white">{t('events.title')}</Label>
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                className="bg-white/10 border-white/20 text-white"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="date" className="text-white">{t('events.date')}</Label>
+              <Input
+                id="date"
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                className="bg-white/10 border-white/20 text-white"
+                required
+              />
+            </div>
+
+            <div>
+              <Label className="text-white">{t('events.startTime')}</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={formData.hour} onValueChange={(value) => setFormData({ ...formData, hour: value })}>
+                  <SelectTrigger className="bg-background-dark border-border text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <SelectItem key={i} value={i.toString()}>
+                        {i.toString().padStart(2, '0')}:00
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={formData.minute} onValueChange={(value) => setFormData({ ...formData, minute: value })}>
+                  <SelectTrigger className="bg-background-dark border-border text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="00">:00</SelectItem>
+                    <SelectItem value="15">:15</SelectItem>
+                    <SelectItem value="30">:30</SelectItem>
+                    <SelectItem value="45">:45</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="duration" className="text-white">{t('events.duration')}</Label>
+              <Input
+                id="duration"
+                type="number"
+                min="15"
+                step="15"
+                value={formData.duration}
+                onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) })}
+                className="bg-white/10 border-white/20 text-white"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="type" className="text-white">{t('events.type')}</Label>
+              <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
+                <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {trainingTypes.map(type => (
+                    <SelectItem key={type} value={type}>
+                      {t(`events.types.${type}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Organizational Event Toggle */}
+            {(userData?.role === 'admin' || isSuperAdmin) && !eventId && (
+              <div className="bg-blue-500/10 border border-blue-400/30 p-4 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="checkbox"
+                    id="organizational"
+                    checked={formData.isOrganizational}
+                    onChange={(e) => setFormData({ ...formData, isOrganizational: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="organizational" className="text-blue-300 cursor-pointer font-semibold">
+                    🔵 Organizational Event
+                  </Label>
+                </div>
+                {formData.isOrganizational && (
+                  <p className="text-blue-200/70 text-xs mt-1">
+                    This event will appear in light blue. Trainers can confirm their availability, and users will select a trainer when booking.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Capacity - hide for organizational events */}
+            {!formData.isOrganizational && (
+              <div>
+                <Label className="text-white">{t('events.capacity')}</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="unlimited"
+                      checked={formData.isUnlimited}
+                      onChange={(e) => setFormData({ ...formData, isUnlimited: e.target.checked })}
+                      className="w-4 h-4"
+                    />
+                    <Label htmlFor="unlimited" className="text-white cursor-pointer">
+                      {t('events.unlimited')}
+                    </Label>
+                  </div>
+                  {!formData.isUnlimited && (
+                    <Input
+                      type="number"
+                      min="1"
+                      value={formData.capacity}
+                      onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) })}
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {!eventId && !formData.isOrganizational && (
+              <>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="checkbox"
+                      id="recurring"
+                      checked={formData.isRecurring}
+                      onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked })}
+                      className="w-4 h-4"
+                    />
+                    <Label htmlFor="recurring" className="text-white cursor-pointer">
+                      {t('events.recurring')}
+                    </Label>
+                  </div>
+                </div>
+
+                {formData.isRecurring && (
+                  <>
+                    <div>
+                      <Label htmlFor="recurringType" className="text-white">{t('events.recurringType')}</Label>
+                      <Select value={formData.recurringType} onValueChange={(value) => setFormData({ ...formData, recurringType: value as 'daily' | 'weekly' | 'monthly' })}>
+                        <SelectTrigger className="bg-background-dark border-border text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily (every day)</SelectItem>
+                          <SelectItem value="weekly">Weekly (select days)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.recurringType === 'weekly' && (
+                      <div>
+                        <Label className="text-white">Select Days</Label>
+                        <div className="grid grid-cols-7 gap-2 mt-2">
+                          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                const newDays = formData.weekDays.includes(idx)
+                                  ? formData.weekDays.filter(d => d !== idx)
+                                  : [...formData.weekDays, idx]
+                                setFormData({ ...formData, weekDays: newDays })
+                              }}
+                              className={`p-2 rounded text-xs font-semibold transition-colors ${
+                                formData.weekDays.includes(idx)
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-background-dark border border-border text-white hover:bg-primary/20'
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <Label htmlFor="occurrences" className="text-white">
+                        {t('events.occurrences')} (how many times)
+                      </Label>
+                      <Input
+                        id="occurrences"
+                        type="number"
+                        min="2"
+                        max="52"
+                        value={formData.occurrences}
+                        onChange={(e) => setFormData({ ...formData, occurrences: parseInt(e.target.value) })}
+                        className="bg-background-dark border-border text-white"
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            <div className="flex gap-4 pt-4">
+              <Button type="submit" className="flex-1" disabled={loading}>
+                {loading ? t('common.loading') : t('common.save')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(-1)}
+                className="flex-1 border-white/20 text-white hover:bg-white/10"
+              >
+                {t('common.cancel')}
+              </Button>
+              {eventId && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={loading}
+                >
+                  {t('common.delete')}
+                </Button>
+              )}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
