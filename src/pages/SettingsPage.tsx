@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast'
 import { generateInviteCode } from '@/lib/utils'
 import { QRCodeSVG } from 'qrcode.react'
 import { Download, Upload, Copy } from 'lucide-react'
+import { useTheme } from '@/contexts/ThemeContext'
 
 interface Tenant {
   id: string
@@ -35,8 +36,9 @@ export default function SettingsPage() {
   const [showQR, setShowQR] = useState(false)
   const [generatedCode, setGeneratedCode] = useState('')
   const qrRef = useRef<HTMLDivElement>(null)
+  const { tenant } = useTheme()
 
-  const appUrl = window.location.origin
+  const appUrl = `https://${tenant.domain}`
 
   // Load tenants for SuperAdmin
   useEffect(() => {
