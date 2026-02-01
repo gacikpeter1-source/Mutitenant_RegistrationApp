@@ -52,6 +52,7 @@ export const TenantSwitcher = ({ onTenantChange }: TenantSwitcherProps) => {
     const tenant = tenants.find(t => t.id === tenantId);
     if (tenant) {
       onTenantChange(tenant);
+      window.location.href = '/';
     }
   };
 
