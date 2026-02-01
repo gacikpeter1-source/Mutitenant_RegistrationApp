@@ -98,7 +98,7 @@ export default function Layout({ children }: LayoutProps) {
                       </Button>
                     </Link>
                   )}
-                  {userData.role === 'admin' && (
+                  {(userData.role === 'admin' || isSuperAdmin) && (
                     <>
                       <Link to="/admin">
                         <Button variant="ghost" className="text-white hover:text-primary hover:bg-primary/10">
@@ -194,7 +194,7 @@ export default function Layout({ children }: LayoutProps) {
                       </Button>
                     </Link>
                   )}
-                  {userData.role === 'admin' && (
+                  {(userData.role === 'admin' || isSuperAdmin) && (
                     <>
                       <Link to="/admin" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="ghost" className="w-full text-white hover:text-primary hover:bg-primary/10 justify-start">
