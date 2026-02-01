@@ -2,10 +2,9 @@ import { ReactNode, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTheme } from '@/contexts/ThemeContext'
 import { Button } from './ui/button'
 import { Menu, X, ArrowLeft, Globe } from 'lucide-react'
-import { doc, getDoc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
 
 interface LayoutProps {
   children: ReactNode
@@ -14,24 +13,15 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const { t, i18n } = useTranslation()
   const { userData, signOut, isSuperAdmin } = useAuth()
+  const { tenant } = useTheme() // MULTI-TENANT: Get current tenant
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null)
   const [showBack, setShowBack] = useState(false)
 
-  useEffect(() => {
-    // Load background image from settings
-    const loadBackground = async () => {
-      const settingsDoc = await getDoc(doc(db, 'settings', 'app'))
-      if (settingsDoc.exists()) {
-        const data = settingsDoc.data()
-        if (data.backgroundImageUrl) {
-          setBackgroundUrl(data.backgroundImageUrl)
-        }
-      }
-    }
-    loadBackground()
+  // MULTI-TENANT: Background from tenant theme
+  const backgroundUrl = tenant.theme?.backgroundImageUrl || null
 
+  useEffect(() => {
     // Check if we can go back in history
     setShowBack(window.history.length > 1)
   }, [])

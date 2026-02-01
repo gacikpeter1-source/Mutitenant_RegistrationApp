@@ -1,6 +1,7 @@
 export interface TenantTheme {
     primary: string;
     primaryDark: string;
+    backgroundImageUrl?: string; // MULTI-TENANT: Per-tenant background image
     background: {
       darkest: string;
       dark: string;
