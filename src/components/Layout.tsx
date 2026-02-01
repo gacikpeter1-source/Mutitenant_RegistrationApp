@@ -67,7 +67,7 @@ export default function Layout({ children }: LayoutProps) {
                 </Button>
               )}
               <Link to="/" className="text-white hover:text-primary transition-colors">
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight">{t('app.title')}</h1>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight">{tenant?.name || t('app.title')}</h1>
               </Link>
             </div>
 

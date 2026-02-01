@@ -19,6 +19,7 @@ export default function HomePage() {
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const { setTenant } = useTheme()
+  const { tenant } = useTheme()
 
   useEffect(() => {
     if (!currentTenantId) return
@@ -107,7 +108,7 @@ export default function HomePage() {
   return (
     <div className="content-container py-8">
         <div className="mb-8 text-center">
-        <h1 className="text-white mb-2">{t('app.title')}</h1>
+        <h1 className="text-white mb-2">{tenant.name}</h1>
         <p className="text-white/80 text-lg">{t('app.subtitle')}</p>
       </div>
 
