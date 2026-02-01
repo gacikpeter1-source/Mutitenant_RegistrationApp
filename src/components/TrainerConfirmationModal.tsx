@@ -192,7 +192,7 @@ export default function TrainerConfirmationModal({
                       />
                     ) : (
                       <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                        {trainer.trainerName.charAt(0)}
+                        {trainer.trainerName?.charAt(0) || '?'} 
                       </div>
                     )}
                     <div className="flex-1">
