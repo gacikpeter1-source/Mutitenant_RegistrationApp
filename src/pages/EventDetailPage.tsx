@@ -20,7 +20,7 @@ import TrainerSelectionModal from '@/components/TrainerSelectionModal'
 export default function EventDetailPage() {
   const { t } = useTranslation()
   const { eventId } = useParams<{ eventId: string }>()
-  const { userData: user, isTrainer } = useAuth()
+  const { userData: user, isTrainer, isSuperAdmin } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
   const [event, setEvent] = useState<Event | null>(null)
@@ -334,7 +334,7 @@ export default function EventDetailPage() {
 
   // Check if current user is a trainer in this event or admin
   const isEventTrainer = user && event.trainers && Object.keys(event.trainers).includes(user.uid)
-  const canDeleteEvent = (isEventTrainer || user?.role === 'admin') && isTrainer
+  const canDeleteEvent = isEventTrainer || user?.role === 'admin' || isSuperAdmin
 
   // Check if this is an organizational event
   const isOrganizationalEvent = event.isOrganizational === true

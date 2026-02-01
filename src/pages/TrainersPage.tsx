@@ -3,20 +3,26 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useAuth } from '@/contexts/AuthContext'
 import { User } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { User as UserIcon } from 'lucide-react'
 
 export default function TrainersPage() {
   const { t } = useTranslation()
+  const { currentTenantId } = useAuth() // MULTI-TENANT: Get current tenant
   const [trainers, setTrainers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!currentTenantId) return // Wait for tenant to load
+    
     const fetchTrainers = async () => {
       try {
+        // MULTI-TENANT: Filter by tenantId AND status
         const trainersQuery = query(
           collection(db, 'users'),
+          where('tenantId', '==', currentTenantId),
           where('status', '==', 'approved')
         )
         
@@ -36,7 +42,16 @@ export default function TrainersPage() {
     }
 
     fetchTrainers()
-  }, [])
+  }, [currentTenantId])
+
+  // Loading state when tenant not available
+  if (!currentTenantId) {
+    return (
+      <div className="content-container py-8">
+        <div className="text-white text-center">Loading tenant...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="content-container py-8">
@@ -89,8 +104,3 @@ export default function TrainersPage() {
     </div>
   )
 }
-
-
-
-
-
