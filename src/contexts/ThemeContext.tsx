@@ -33,9 +33,39 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   useEffect(() => {
     const loadTenant = async () => {
       try {
-        const tenantData = await getCurrentTenant();
-        setTenant(tenantData);
-        applyTheme(tenantData);
+        // Check if user manually selected a tenant via TenantSwitcher
+        const savedTenantId = localStorage.getItem('selectedTenantId');
+        
+        if (savedTenantId) {
+          // Load the saved tenant from Firestore
+          const { doc, getDoc } = await import('firebase/firestore');
+          const { db } = await import('../lib/firebase');
+          const tenantDoc = await getDoc(doc(db, 'tenants', savedTenantId));
+          
+          if (tenantDoc.exists()) {
+            const tenantData: Tenant = {
+              id: tenantDoc.id,
+              name: tenantDoc.data().name,
+              domain: tenantDoc.data().domain,
+              isActive: tenantDoc.data().isActive,
+              theme: tenantDoc.data().theme,
+              logo: tenantDoc.data().logo,
+              createdAt: tenantDoc.data().createdAt?.toDate(),
+            };
+            setTenant(tenantData);
+            applyTheme(tenantData);
+          } else {
+            // Saved tenant not found, fall back to domain-based
+            const tenantData = await getCurrentTenant();
+            setTenant(tenantData);
+            applyTheme(tenantData);
+          }
+        } else {
+          // No saved tenant, use domain-based detection
+          const tenantData = await getCurrentTenant();
+          setTenant(tenantData);
+          applyTheme(tenantData);
+        }
       } catch (error) {
         console.error('Failed to load tenant:', error);
         // Use default theme on error

@@ -28,7 +28,14 @@ export const TenantSwitcher = ({ onTenantChange }: TenantSwitcherProps) => {
         }));
         
         setTenants(tenantList);
-        if (tenantList.length > 0) {
+        
+        // Load saved tenant from localStorage
+        const savedTenantId = localStorage.getItem('selectedTenantId');
+        if (savedTenantId && tenantList.find(t => t.id === savedTenantId)) {
+          setSelectedTenant(savedTenantId);
+          const tenant = tenantList.find(t => t.id === savedTenantId);
+          if (tenant) onTenantChange(tenant);
+        } else if (tenantList.length > 0) {
           setSelectedTenant(tenantList[0].id);
         }
       } catch (error) {
@@ -41,6 +48,7 @@ export const TenantSwitcher = ({ onTenantChange }: TenantSwitcherProps) => {
 
   const handleChange = (tenantId: string) => {
     setSelectedTenant(tenantId);
+    localStorage.setItem('selectedTenantId', tenantId); // Save to localStorage
     const tenant = tenants.find(t => t.id === tenantId);
     if (tenant) {
       onTenantChange(tenant);
