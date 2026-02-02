@@ -140,8 +140,11 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     const primaryRgb = hexToRgb(theme.primary);
     root.style.setProperty('--primary', primaryRgb);
     
-    // MULTI-TENANT: Apply favicon
+    // MULTI-TENANT: Apply all dynamic branding
     applyFavicon(tenantData.favicon);
+    applyTitle(tenantData.name);
+    applyThemeColor(theme.primary);
+    applyAppleTouchIcon(tenantData.logo);
     
     console.log(`Theme applied for tenant: ${tenantData.name}`);
   };
@@ -160,6 +163,41 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     // Use tenant favicon or fallback to default
     link.href = faviconUrl || '/favicon.ico';
     console.log(`Favicon applied: ${link.href}`);
+  };
+
+  const applyTitle = (tenantName: string) => {
+    // Update page title
+    document.title = `${tenantName} - Rezervácia tréningov`;
+    console.log(`Title applied: ${document.title}`);
+  };
+
+  const applyThemeColor = (primaryColor: string) => {
+    // Find or create theme-color meta tag
+    let meta = document.querySelector("meta[name='theme-color']") as HTMLMetaElement;
+    
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      document.head.appendChild(meta);
+    }
+    
+    meta.content = primaryColor;
+    console.log(`Theme color applied: ${primaryColor}`);
+  };
+
+  const applyAppleTouchIcon = (logoUrl?: string) => {
+    // Find or create apple-touch-icon link element
+    let link = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement;
+    
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'apple-touch-icon';
+      document.head.appendChild(link);
+    }
+    
+    // Use tenant logo or fallback to default
+    link.href = logoUrl || '/apple-touch-icon.png';
+    console.log(`Apple touch icon applied: ${link.href}`);
   };
 
   const handleSetTenant = (newTenant: Tenant) => {
