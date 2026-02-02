@@ -147,19 +147,19 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   };
 
   const applyFavicon = (faviconUrl?: string) => {
-    if (!faviconUrl) return;
-    
     // Find or create favicon link element
     let link = document.querySelector("link[rel='icon']") as HTMLLinkElement;
     
     if (!link) {
       link = document.createElement('link');
       link.rel = 'icon';
+      link.type = 'image/x-icon';
       document.head.appendChild(link);
     }
     
-    link.href = faviconUrl;
-    console.log(`Favicon applied: ${faviconUrl}`);
+    // Use tenant favicon or fallback to default
+    link.href = faviconUrl || '/favicon.ico';
+    console.log(`Favicon applied: ${link.href}`);
   };
 
   const handleSetTenant = (newTenant: Tenant) => {
