@@ -133,7 +133,7 @@ export default function ReportsTab() {
       snapshot.docs.forEach(doc => {
         const eventData = doc.data()
         
-        if (eventData.isOrganizational && eventData.trainers) {
+        if (eventData.isOrganizational && eventData.trainers && Object.keys(eventData.trainers).length > 0) {
           const trainerIds = Object.keys(eventData.trainers)
           if (trainerFilter === 'all') {
             count += trainerIds.length
@@ -141,8 +141,13 @@ export default function ReportsTab() {
             count += trainerIds.filter(id => selectedTrainerIds.includes(id)).length
           }
         } else {
+          // Regular events OR events without trainers
           const trainerId = eventData.createdBy
-          if (trainerFilter === 'all' || selectedTrainerIds.includes(trainerId)) {
+          if (trainerFilter === 'all') {
+            // Include all events regardless of trainer
+            count += 1
+          } else if (trainerId && selectedTrainerIds.includes(trainerId)) {
+            // Only include if specific trainer is selected
             count += 1
           }
         }
@@ -187,13 +192,28 @@ export default function ReportsTab() {
         const dateStr = eventDate.toISOString().split('T')[0]
         
         // Handle organizational events (multi-trainer)
-        if (eventData.isOrganizational && eventData.trainers) {
+        if (eventData.isOrganizational && eventData.trainers && Object.keys(eventData.trainers).length > 0) {
+          let hasValidTrainer = false
+          
           for (const [trainerId] of Object.entries(eventData.trainers) as [string, any][]) {
             // Filter by selected trainers
             if (trainerFilter === 'specific' && !selectedTrainerIds.includes(trainerId)) continue
             
-            // Get trainer name
-            const trainerDoc = await getDocs(query(collection(db, 'users'), where('__name__', '==', trainerId)))
+            // MULTI-TENANT: Get trainer name from CURRENT TENANT ONLY
+            const trainerQuery = query(
+              collection(db, 'users'),
+              where('__name__', '==', trainerId),
+              where('tenantId', '==', currentTenantId)
+            )
+            const trainerDoc = await getDocs(trainerQuery)
+            
+            // Skip if trainer doesn't belong to current tenant
+            if (trainerDoc.empty) {
+              console.warn(`Trainer ${trainerId} not found in tenant ${currentTenantId} - skipping`)
+              continue
+            }
+            
+            hasValidTrainer = true
             const trainerName = trainerDoc.docs[0]?.data()?.name || 'Unknown'
             
             // MULTI-TENANT: Get registrations only from current tenant
@@ -219,23 +239,76 @@ export default function ReportsTab() {
               Status: eventData.status || 'active'
             })
           }
-        } else {
-          // Regular events
-          const trainerId = eventData.createdBy
-          if (trainerFilter === 'specific' && !selectedTrainerIds.includes(trainerId)) continue
           
-          // Get trainer name
-          const trainerDoc = await getDocs(query(collection(db, 'users'), where('__name__', '==', trainerId)))
-          const trainerName = trainerDoc.docs[0]?.data()?.name || 'Unknown'
+          // If no valid trainers found, include event with "No Trainer Assigned"
+          if (!hasValidTrainer && trainerFilter === 'all') {
+            const registrationsQuery = query(
+              collection(db, 'registrations'),
+              where('tenantId', '==', currentTenantId),
+              where('eventId', '==', eventDoc.id),
+              where('status', '==', 'confirmed')
+            )
+            const regsSnapshot = await getDocs(registrationsQuery)
+            const participants = regsSnapshot.docs.map(doc => doc.data().name)
+            
+            reportData.push({
+              Date: dateStr,
+              Time: eventData.startTime || '',
+              Event: eventData.title,
+              Trainer: 'No Trainer Assigned',
+              Type: 'Organizational',
+              'Participants Count': participants.length,
+              Participants: participants.join(', ') || 'None',
+              Duration: `${eventData.duration || 0} min`,
+              Status: eventData.status || 'active'
+            })
+          }
+        } else if (!eventData.isOrganizational || !eventData.trainers || Object.keys(eventData.trainers).length === 0) {
+          // Regular events OR organizational events without trainers
+          const trainerId = eventData.createdBy
+          
+          // If trainer filter is specific and this trainer not selected, skip
+          if (trainerFilter === 'specific' && trainerId && !selectedTrainerIds.includes(trainerId)) continue
+          
+          let trainerName = 'No Trainer Assigned'
+          
+          if (trainerId) {
+            // MULTI-TENANT: Get trainer name from CURRENT TENANT ONLY
+            const trainerQuery = query(
+              collection(db, 'users'),
+              where('__name__', '==', trainerId),
+              where('tenantId', '==', currentTenantId)
+            )
+            const trainerDoc = await getDocs(trainerQuery)
+            
+            if (!trainerDoc.empty) {
+              trainerName = trainerDoc.docs[0]?.data()?.name || 'Unknown Trainer'
+            } else {
+              console.warn(`Trainer ${trainerId} not found in tenant ${currentTenantId}`)
+              // Still include event but with "Unknown Trainer (Other Tenant)"
+              trainerName = 'Unknown Trainer (Other Tenant)'
+            }
+          }
           
           // MULTI-TENANT: Get registrations only from current tenant
-          const registrationsQuery = query(
-            collection(db, 'registrations'),
-            where('tenantId', '==', currentTenantId),
-            where('eventId', '==', eventDoc.id),
-            where('trainerId', '==', trainerId),
-            where('status', '==', 'confirmed')
-          )
+          let registrationsQuery
+          if (trainerId) {
+            registrationsQuery = query(
+              collection(db, 'registrations'),
+              where('tenantId', '==', currentTenantId),
+              where('eventId', '==', eventDoc.id),
+              where('trainerId', '==', trainerId),
+              where('status', '==', 'confirmed')
+            )
+          } else {
+            // No trainer assigned - get all registrations for this event
+            registrationsQuery = query(
+              collection(db, 'registrations'),
+              where('tenantId', '==', currentTenantId),
+              where('eventId', '==', eventDoc.id),
+              where('status', '==', 'confirmed')
+            )
+          }
           const regsSnapshot = await getDocs(registrationsQuery)
           const participants = regsSnapshot.docs.map(doc => doc.data().name)
           
@@ -244,7 +317,7 @@ export default function ReportsTab() {
             Time: eventData.startTime || '',
             Event: eventData.title,
             Trainer: trainerName,
-            Type: 'Regular',
+            Type: eventData.isOrganizational ? 'Organizational' : 'Regular',
             'Participants Count': participants.length,
             Participants: participants.join(', ') || 'None',
             Duration: `${eventData.duration || 0} min`,
