@@ -51,8 +51,9 @@ export const TenantSwitcher = ({ onTenantChange }: TenantSwitcherProps) => {
     localStorage.setItem('selectedTenantId', tenantId); // Save to localStorage
     const tenant = tenants.find(t => t.id === tenantId);
     if (tenant) {
+      // Cache full tenant data for instant loading
+      localStorage.setItem(`tenant_${tenantId}`, JSON.stringify(tenant));
       onTenantChange(tenant);
-      window.location.href = '/';
     }
   };
 

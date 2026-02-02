@@ -27,8 +27,30 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider = ({ children }: ThemeProviderProps) => {
-  const [tenant, setTenant] = useState<Tenant>(DEFAULT_TENANT);
-  const [isLoading, setIsLoading] = useState(true);
+  // CRITICAL: Initialize tenant from localStorage synchronously to prevent flash
+  const getInitialTenant = (): Tenant => {
+    const savedTenantId = localStorage.getItem('selectedTenantId')
+    if (savedTenantId) {
+      // Try to get cached tenant data
+      const cachedTenantData = localStorage.getItem(`tenant_${savedTenantId}`)
+      if (cachedTenantData) {
+        try {
+          return JSON.parse(cachedTenantData)
+        } catch (e) {
+          console.error('Failed to parse cached tenant:', e)
+        }
+      }
+    }
+    return DEFAULT_TENANT
+  }
+
+  const [tenant, setTenant] = useState<Tenant>(getInitialTenant())
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Apply theme immediately on mount (synchronously)
+  useEffect(() => {
+    applyTheme(tenant)
+  }, []) // Only on mount
 
   useEffect(() => {
     const loadTenant = async () => {
@@ -52,6 +74,10 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
               logo: tenantDoc.data().logo,
               createdAt: tenantDoc.data().createdAt?.toDate(),
             };
+            
+            // Cache tenant data for instant loading next time
+            localStorage.setItem(`tenant_${savedTenantId}`, JSON.stringify(tenantData))
+            
             setTenant(tenantData);
             applyTheme(tenantData);
           } else {
