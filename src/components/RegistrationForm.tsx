@@ -154,7 +154,7 @@ export default function RegistrationForm({
               <body>
                 <div class="container">
                   <div class="header">
-                    <h1>🏒 ${tenant.name}</h1>
+                    <h1>${tenant.name}</h1>
                     <h2>${isFull ? 'Čakacia listina' : 'Potvrdenie registrácie'}</h2>
                   </div>
                   
