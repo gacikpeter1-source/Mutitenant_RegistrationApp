@@ -161,7 +161,9 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     }
     
     // Use tenant favicon or fallback to default
-    link.href = faviconUrl || '/favicon.ico';
+    // Add cache-busting parameter to force iPhone Safari to reload
+    const baseUrl = faviconUrl || '/favicon.ico';
+    link.href = faviconUrl ? `${baseUrl}?v=${Date.now()}` : baseUrl;
     console.log(`Favicon applied: ${link.href}`);
   };
 
@@ -196,7 +198,9 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     }
     
     // Use tenant logo or fallback to default
-    link.href = logoUrl || '/apple-touch-icon.png';
+    // Add cache-busting parameter to force iPhone to reload
+    const baseUrl = logoUrl || '/apple-touch-icon.png';
+    link.href = logoUrl ? `${baseUrl}?v=${Date.now()}` : baseUrl;
     console.log(`Apple touch icon applied: ${link.href}`);
   };
 
