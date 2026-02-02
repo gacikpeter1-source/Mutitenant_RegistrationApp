@@ -140,7 +140,26 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     const primaryRgb = hexToRgb(theme.primary);
     root.style.setProperty('--primary', primaryRgb);
     
+    // MULTI-TENANT: Apply favicon
+    applyFavicon(tenantData.favicon);
+    
     console.log(`Theme applied for tenant: ${tenantData.name}`);
+  };
+
+  const applyFavicon = (faviconUrl?: string) => {
+    if (!faviconUrl) return;
+    
+    // Find or create favicon link element
+    let link = document.querySelector("link[rel='icon']") as HTMLLinkElement;
+    
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    
+    link.href = faviconUrl;
+    console.log(`Favicon applied: ${faviconUrl}`);
   };
 
   const handleSetTenant = (newTenant: Tenant) => {

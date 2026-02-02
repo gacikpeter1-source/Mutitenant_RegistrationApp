@@ -13,7 +13,6 @@ import { useToast } from '@/hooks/use-toast'
 import { generateInviteCode } from '@/lib/utils'
 import { QRCodeSVG } from 'qrcode.react'
 import { Download, Upload, Copy } from 'lucide-react'
-import { useTheme } from '@/contexts/ThemeContext'
 
 interface Tenant {
   id: string
@@ -36,9 +35,8 @@ export default function SettingsPage() {
   const [showQR, setShowQR] = useState(false)
   const [generatedCode, setGeneratedCode] = useState('')
   const qrRef = useRef<HTMLDivElement>(null)
-  const { tenant } = useTheme()
 
-  const appUrl = `https://${tenant.domain}`
+  const appUrl = window.location.origin
 
   // Load tenants for SuperAdmin
   useEffect(() => {
@@ -138,6 +136,64 @@ export default function SettingsPage() {
     }
   }
 
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate tenant selection
+    const tenantId = isSuperAdmin ? selectedTenantForBackground : currentTenantId
+    if (!tenantId) {
+      toast({
+        title: t('common.error'),
+        description: 'Please select a tenant',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    // Validate file type - accept .ico, .png, .svg
+    const validTypes = ['image/x-icon', 'image/vnd.microsoft.icon', 'image/png', 'image/svg+xml']
+    if (!validTypes.includes(file.type) && !file.name.endsWith('.ico')) {
+      toast({
+        title: t('common.error'),
+        description: 'Please upload a favicon file (.ico, .png, or .svg)',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    setUploading(true)
+    try {
+      // Upload to tenant-specific folder
+      const storageRef = ref(storage, `tenants/${tenantId}/favicon/${Date.now()}_${file.name}`)
+      await uploadBytes(storageRef, file)
+      const url = await getDownloadURL(storageRef)
+
+      // MULTI-TENANT: Update favicon in tenant document
+      await updateDoc(doc(db, 'tenants', tenantId), {
+        favicon: url,
+        updatedAt: new Date()
+      })
+
+      toast({
+        title: t('common.success'),
+        description: 'Favicon updated successfully. Refresh to see changes.'
+      })
+
+      // Refresh page to show new favicon
+      setTimeout(() => window.location.reload(), 1000)
+    } catch (error: any) {
+      console.error('Error uploading favicon:', error)
+      toast({
+        title: t('common.error'),
+        description: error.message || 'Failed to upload favicon',
+        variant: 'destructive'
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleDeleteBackground = async () => {
     if (!confirm('Are you sure you want to remove the background image?')) return
 
@@ -172,6 +228,47 @@ export default function SettingsPage() {
       toast({
         title: t('common.error'),
         description: error.message || 'Failed to remove background',
+        variant: 'destructive'
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDeleteFavicon = async () => {
+    if (!confirm('Are you sure you want to remove the favicon?')) return
+
+    // Validate tenant selection
+    const tenantId = isSuperAdmin ? selectedTenantForBackground : currentTenantId
+    if (!tenantId) {
+      toast({
+        title: t('common.error'),
+        description: 'Please select a tenant',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    setUploading(true)
+    try {
+      // MULTI-TENANT: Remove favicon from tenant document
+      await updateDoc(doc(db, 'tenants', tenantId), {
+        favicon: null,
+        updatedAt: new Date()
+      })
+
+      toast({
+        title: t('common.success'),
+        description: 'Favicon removed successfully. Refresh to see changes.'
+      })
+
+      // Refresh page to show changes
+      setTimeout(() => window.location.reload(), 1000)
+    } catch (error: any) {
+      console.error('Error removing favicon:', error)
+      toast({
+        title: t('common.error'),
+        description: error.message || 'Failed to remove favicon',
         variant: 'destructive'
       })
     } finally {
@@ -371,6 +468,49 @@ export default function SettingsPage() {
                   className="w-full sm:w-auto"
                 >
                   Remove Background
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Favicon Upload */}
+        <Card className="bg-white/10 border-white/20">
+          <CardHeader>
+            <CardTitle className="text-white">Favicon</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="favicon" className="text-white">
+                  Upload Favicon (.ico, .png, or .svg)
+                </Label>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    id="favicon"
+                    type="file"
+                    accept=".ico,.png,.svg,image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml"
+                    onChange={handleFaviconUpload}
+                    className="bg-white/10 border-white/20 text-white flex-1"
+                    disabled={uploading}
+                  />
+                  <Button disabled={uploading}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {uploading ? t('common.loading') : 'Upload Favicon'}
+                  </Button>
+                </div>
+                <p className="text-text-muted text-sm mt-2">
+                  Recommended: 32x32 or 16x16 pixels. Supports .ico, .png, and .svg formats.
+                </p>
+              </div>
+              <div>
+                <Button 
+                  onClick={handleDeleteFavicon} 
+                  variant="destructive" 
+                  disabled={uploading}
+                  className="w-full sm:w-auto"
+                >
+                  Remove Favicon
                 </Button>
               </div>
             </div>
