@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { collection, addDoc, doc, updateDoc, increment } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useTheme } from '@/contexts/ThemeContext'
 import { Event, TrainerSlot } from '@/types'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
 import { Button } from './ui/button'
@@ -33,6 +34,7 @@ export default function RegistrationForm({
 }: RegistrationFormProps) {
   const { t } = useTranslation()
   const { toast } = useToast()
+  const { tenant } = useTheme() // MULTI-TENANT: Get current tenant
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -120,12 +122,15 @@ export default function RegistrationForm({
 
       // Send confirmation email (if Firebase Email Extension is installed)
       try {
+        const primaryColor = tenant.theme.primary || '#FDB913'
+        const appUrl = window.location.origin
+        
         const emailData = {
           to: formData.email,
           message: {
             subject: isFull 
-              ? 'Pridaný na čakaciu listinu - Aréna Sršňov' 
-              : 'Potvrdenie registrácie - Aréna Sršňov',
+              ? `Pridaný na čakaciu listinu - ${tenant.name}` 
+              : `Potvrdenie registrácie - ${tenant.name}`,
             html: `
               <!DOCTYPE html>
               <html>
@@ -133,9 +138,9 @@ export default function RegistrationForm({
                 <style>
                   body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
                   .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                  .header { background: #1a1a1a; color: #FDB913; padding: 20px; text-align: center; }
+                  .header { background: #1a1a1a; color: ${primaryColor}; padding: 20px; text-align: center; }
                   .content { background: #f9f9f9; padding: 20px; }
-                  .info-row { margin: 10px 0; padding: 10px; background: white; border-left: 4px solid #FDB913; }
+                  .info-row { margin: 10px 0; padding: 10px; background: white; border-left: 4px solid ${primaryColor}; }
                   .label { font-weight: bold; color: #666; }
                   .value { color: #000; }
                   .qr-section { text-align: center; margin: 20px 0; padding: 20px; background: white; }
@@ -148,7 +153,7 @@ export default function RegistrationForm({
               <body>
                 <div class="container">
                   <div class="header">
-                    <h1>🏒 Aréna Sršňov</h1>
+                    <h1>🏒 ${tenant.name}</h1>
                     <h2>${isFull ? 'Čakacia listina' : 'Potvrdenie registrácie'}</h2>
                   </div>
                   
@@ -186,9 +191,9 @@ export default function RegistrationForm({
                     </div>
                     
                     ${!isFull ? `
-                      <div class="info-row" style="border-left-color: #FDB913; background: #fffbeb;">
+                      <div class="info-row" style="border-left-color: ${primaryColor}; background: #fffbeb;">
                         <span class="label">Vaše registračné číslo:</span>
-                        <span class="value" style="font-size: 20px; font-weight: bold; color: #FDB913;">${uniqueCode}</span>
+                        <span class="value" style="font-size: 20px; font-weight: bold; color: ${primaryColor};">${uniqueCode}</span>
                       </div>
                       
                       <div class="qr-section">
@@ -224,7 +229,7 @@ export default function RegistrationForm({
                       <p style="margin: 0 0 15px 0; font-size: 14px; color: #666;">
                         Potrebujete zrušiť registráciu?
                       </p>
-                      <a href="https://arena-srsnov.vercel.app/my-registration/${registrationId}/${cancellationToken}" 
+                      <a href="${appUrl}/my-registration/${registrationId}/${cancellationToken}" 
                          style="display: inline-block; padding: 12px 30px; background: #dc2626; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px;">
                         Zrušiť registráciu
                       </a>
@@ -235,11 +240,11 @@ export default function RegistrationForm({
                   </div>
                   
                   <div class="footer">
-                    <p>Tento email bol automaticky vygenerovaný systémom Aréna Sršňov.</p>
+                    <p>Tento email bol automaticky vygenerovaný systémom ${tenant.name}.</p>
                     <p style="font-size: 11px; color: #999; margin-top: 10px;">
                       Ak ste túto registráciu nevykonali, ignorujte tento email.
                     </p>
-                    <p>&copy; ${new Date().getFullYear()} Aréna Sršňov. Všetky práva vyhradené.</p>
+                    <p>&copy; ${new Date().getFullYear()} ${tenant.name}. Všetky práva vyhradené.</p>
                   </div>
                 </div>
               </body>
