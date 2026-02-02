@@ -127,7 +127,6 @@ export default function RegistrationForm({
         
         const emailData = {
           to: formData.email,
-          from: `${tenant.name} <gacikpeter1@gmail.com>`, // MULTI-TENANT: Custom sender name
           message: {
             subject: isFull 
               ? `Pridaný na čakaciu listinu - ${tenant.name}` 

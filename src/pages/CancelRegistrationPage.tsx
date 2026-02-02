@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useTheme } from '@/contexts/ThemeContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -12,8 +13,10 @@ import { formatDate } from '@/lib/utils'
 
 export default function CancelRegistrationPage() {
   const { registrationId, token } = useParams<{ registrationId: string; token: string }>()
+  const [searchParams] = useSearchParams()
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { setTenant } = useTheme()
   
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
@@ -21,6 +24,34 @@ export default function CancelRegistrationPage() {
   const [error, setError] = useState<string | null>(null)
   const [registration, setRegistration] = useState<any>(null)
   const [event, setEvent] = useState<any>(null)
+
+  // MULTI-TENANT: Load tenant from URL before anything else
+  useEffect(() => {
+    const tenantId = searchParams.get('tenant')
+    if (tenantId) {
+      const loadTenant = async () => {
+        try {
+          const tenantDoc = await getDoc(doc(db, 'tenants', tenantId))
+          if (tenantDoc.exists()) {
+            const tenantData = {
+              id: tenantDoc.id,
+              name: tenantDoc.data().name,
+              domain: tenantDoc.data().domain,
+              isActive: tenantDoc.data().isActive,
+              theme: tenantDoc.data().theme,
+              logo: tenantDoc.data().logo,
+              createdAt: tenantDoc.data().createdAt?.toDate()
+            }
+            setTenant(tenantData)
+            console.log('✅ Tenant loaded from URL:', tenantData.name)
+          }
+        } catch (error) {
+          console.error('Error loading tenant from URL:', error)
+        }
+      }
+      loadTenant()
+    }
+  }, [searchParams, setTenant])
 
   useEffect(() => {
     const loadRegistration = async () => {
